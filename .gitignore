@@ -1,10 +1,10 @@
 # Models
 models/
-dist/models/
+/dist/models/
 
 # llama.cpp binaries
-llama-*-bin-*/
-dist/llama-*-bin-*/
+/llama-*-bin-*/
+/dist/llama-*-bin-*/
 
 # Build output
 build/
@@ -23,3 +23,5 @@ Thumbs.db
 
 # Claude
 .claude/
+
+Release.zip
