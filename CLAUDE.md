@@ -39,6 +39,7 @@
 ## 配置文件 (config.yaml)
 
 ```yaml
+llamacpp_dir:                     # llama.cpp 目录（可选，留空自动检测）
 model: Hy-MT2-1.8B-Q4_K_M.gguf  # models/ 目录下的文件名
 temperature: 0.7
 top_p: 0.6
@@ -123,6 +124,12 @@ Mac + Q4_K_M 模型全方向测试通过：
 ### #7 [completed] Enter 键触发翻译
 - `app.js`：Enter 直接翻译，Shift+Enter 换行（替代原 Ctrl+Enter）
 - web/ 已同步到 build/ 和 dist/
+
+### #8 [completed] llamacpp_dir 配置 + .gitignore + README
+- `config.yaml` 新增 `llamacpp_dir` 字段，可手动指定 llama-server 所在目录
+- `detectLlamaBinary()` 优先检查配置的 `llamacpp_dir`
+- `.gitignore` 补充 llama 二进制目录、build/dist 输出
+- 新增 `README.md`
 
 ### 待做
 - [ ] 打包为 ZIP 测试 Windows 部署

@@ -13,25 +13,18 @@ fi
 model_count=$(ls models/*.gguf 2>/dev/null | wc -l)
 if [ "$model_count" -eq 0 ]; then
     echo "[错误] models/ 目录中没有 GGUF 模型文件"
-    echo "       参见 models/下载说明.txt"
     exit 1
 fi
 
-# Compile if needed
-if [ ! -f build/translater.jar ] || [ src/TranslatorServer.java -nt build/translater.jar ]; then
-    echo "[信息] 编译中..."
-    rm -rf build
-    mkdir -p build
-    javac -source 8 -target 8 -encoding UTF-8 -d build src/TranslatorServer.java
-    cp -r web build/
-    cd build && jar cfe translater.jar TranslatorServer TranslatorServer.class TranslatorServer'$'*.class
-    cd ..
-    echo "[信息] 编译完成"
+# Check jar
+if [ ! -f translater.jar ]; then
+    echo "[错误] 未找到 translater.jar，请先编译"
+    exit 1
 fi
 
 # Start
 echo "[信息] 启动翻译服务..."
-cd build && java TranslatorServer &
+java -jar translater.jar &
 SERVER_PID=$!
 
 # Wait then open browser

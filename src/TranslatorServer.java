@@ -27,7 +27,7 @@ public class TranslatorServer {
         app.baseDir = getBaseDir();
         app.config = loadConfig(app.baseDir);
 
-        app.llamaBinary = detectLlamaBinary(app.baseDir);
+        app.llamaBinary = detectLlamaBinary(app.baseDir, app.config);
         if (app.llamaBinary == null) {
             System.err.println("[错误] 未找到 llama-server，请安装 llama.cpp");
             System.exit(1);
@@ -65,7 +65,27 @@ public class TranslatorServer {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 
-    private static String detectLlamaBinary(String baseDir) {
+    private static String detectLlamaBinary(String baseDir, Map<String, String> config) {
+        // If llamacpp_dir is configured, look there first
+        String llamacppDir = config.get("llamacpp_dir");
+        if (llamacppDir != null && !llamacppDir.trim().isEmpty()) {
+            llamacppDir = llamacppDir.trim();
+            String exeName = isWindows() ? "llama-server.exe" : "llama-server";
+            // If llamacpp_dir points directly to the executable
+            File direct = new File(llamacppDir);
+            if (direct.exists() && !direct.isDirectory()) {
+                System.out.println("[信息] 使用配置的 llama-server: " + direct.getAbsolutePath());
+                return direct.getAbsolutePath();
+            }
+            // If llamacpp_dir is a directory, look for the executable inside it
+            File exe = new File(llamacppDir, exeName);
+            if (exe.exists()) {
+                System.out.println("[信息] 使用配置的 llama-server: " + exe.getAbsolutePath());
+                return exe.getAbsolutePath();
+            }
+            System.err.println("[警告] 配置的 llamacpp_dir 中未找到 llama-server: " + llamacppDir);
+        }
+
         // On non-Windows, prefer llama-server from PATH (brew install llama.cpp)
         if (!isWindows() && isCommandAvailable("llama-server")) {
             return "llama-server";
