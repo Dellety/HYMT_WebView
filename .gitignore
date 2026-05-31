@@ -1,27 +1,14 @@
-# Models
 models/
 /dist/models/
-
-# llama.cpp binaries
 /llama-*-bin-*/
 /dist/llama-*-bin-*/
-
-# Build output
-build/
 dist/
 *.class
 *.jar
-
-# OS
 .DS_Store
 Thumbs.db
-
-# IDE
 .idea/
 *.iml
 .vscode/
-
-# Claude
 .claude/
-
-Release.zip
+release.zip

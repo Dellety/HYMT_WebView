@@ -457,6 +457,7 @@ public class TranslatorServer {
         public void handle(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
             if ("/".equals(path)) path = "/index.html";
+            if (path.startsWith("/")) path = path.substring(1);
 
             File file = new File(webDir, path);
             if (!file.exists() || file.isDirectory()) {
