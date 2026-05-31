@@ -1,0 +1,27 @@
+PS C:\Citrix\translater> .\build.bat
+'��请确认' is not recognized as an internal or external command,
+operable program or batch file.
+'/b' is not recognized as an internal or external command,
+operable program or batch file.
+'�误]' is not recognized as an internal or external command,
+operable program or batch file.
+'ho' is not recognized as an internal or external command,
+operable program or batch file.
+'��包完成:' is not recognized as an internal or external command,
+operable program or batch file.
+The syntax of the command is incorrect.
+
+PS C:\Citrix\translater> .\start.bat
+'r' is not recognized as an internal or external command,
+operable program or batch file.
+'中' is not recognized as an internal or external command,
+operable program or batch file.
+'�延迟' is not recognized as an internal or external command,
+operable program or batch file.
+'k' is not recognized as an internal or external command,
+operable program or batch file.
+'k' is not recognized as an internal or external command,
+operable program or batch file.
+'�动翻译服务...' is not recognized as an internal or external command,
+operable program or batch file.
+Error: Unable to access jarfile translater.jar

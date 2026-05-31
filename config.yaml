@@ -1,0 +1,13 @@
+# 本地翻译器配置
+# 修改后重启服务生效
+
+# 模型文件名（models/ 目录下的 .gguf 文件）
+model: Hy-MT2-1.8B-Q4_K_M.gguf
+
+# 推理参数
+temperature: 0.7
+top_p: 0.6
+top_k: 20
+repeat_penalty: 1.05
+max_tokens: 2048
+context_size: 4096
