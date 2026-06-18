@@ -134,4 +134,15 @@ Mac + Q4_K_M 模型全方向测试通过：
 ### 待做
 - [ ] 打包为 ZIP 测试 Windows 部署
 
+### #9 [completed] 代码审查修复（安全 + Bug + 效率）
+- **绑定回环地址**：HTTP server 改为 `new InetSocketAddress(LLAMA_HOST, PORT)`（127.0.0.1），不再暴露到 LAN
+- **收紧 CORS**：仅反射 `localhost`/`127.0.0.1` 来源，移除 `*`，防止任意网页调用本地 API
+- **路径穿越修复**：`StaticFileHandler` 用 `getCanonicalFile()` 校验，越界请求返回 403
+- **IME Enter 守卫**：`app.js` 排除 `e.isComposing / keyCode 229`，中文输入法确认候选不再误触发翻译
+- **isCommandAvailable 修复**：`finally` 中 `destroy()` 探测进程，消除进程泄漏
+- **en2both 单次双目标**：一次 prompt 产出中英，解析失败自动回退两次调用，延迟减半且不损正确性（新增 `splitBoth()`）
+- **清理**：删除重复 `extractContent` 死分支、未用的 `callLlamaApi(String)` 重载；`shutdown()` 先 `destroy()` 再 3 秒后升级 `destroyForcibly()`
+- `.gitignore` 补充 `.codegraph/` 和 `build/`
+- 编译验证通过（javac -source 8）
+
   claude --resume 422c54da-233d-443b-99cc-798e4d1cc54b

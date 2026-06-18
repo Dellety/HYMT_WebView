@@ -11,4 +11,6 @@ Thumbs.db
 *.iml
 .vscode/
 .claude/
+.codegraph/
+build/
 release.zip

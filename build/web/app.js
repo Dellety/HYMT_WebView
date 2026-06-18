@@ -159,6 +159,8 @@
   });
 
   sourceText.addEventListener('keydown', function(e) {
+    // IME composition: Enter confirms a candidate — must not trigger translate.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       translate();

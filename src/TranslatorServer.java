@@ -127,12 +127,17 @@ public class TranslatorServer {
     }
 
     private static boolean isCommandAvailable(String cmd) {
+        Process p = null;
         try {
-            Process p = new ProcessBuilder(cmd, "--version").redirectErrorStream(true).start();
-            p.waitFor(5, TimeUnit.SECONDS);
-            return true;
+            p = new ProcessBuilder(cmd, "--version").redirectErrorStream(true).start();
+            // Command exists iff the process started; finishing within the timeout
+            // means it is healthy enough to use.
+            return p.waitFor(5, TimeUnit.SECONDS);
         } catch (Exception e) {
             return false;
+        } finally {
+            // Always reap the probe process — never leak it.
+            if (p != null) p.destroy();
         }
     }
 
@@ -253,7 +258,8 @@ public class TranslatorServer {
     }
 
     private void startHttpServer() throws Exception {
-        httpServer = HttpServer.create(new InetSocketAddress(SERVER_PORT), 0);
+        // Bind to loopback only — this is a local tool, must not be reachable from LAN/web.
+        httpServer = HttpServer.create(new InetSocketAddress(LLAMA_HOST, SERVER_PORT), 0);
         httpServer.setExecutor(Executors.newFixedThreadPool(4));
 
         httpServer.createContext("/api/translate", new TranslateHandler());
@@ -273,7 +279,15 @@ public class TranslatorServer {
         System.out.println("\n[信息] 正在关闭...");
         if (httpServer != null) httpServer.stop(2);
         if (llamaProcess != null && llamaProcess.isAlive()) {
-            llamaProcess.destroyForcibly();
+            llamaProcess.destroy();  // graceful first
+            try {
+                if (!llamaProcess.waitFor(3, TimeUnit.SECONDS)) {
+                    llamaProcess.destroyForcibly();  // escalate only if it hangs
+                }
+            } catch (InterruptedException e) {
+                llamaProcess.destroyForcibly();
+                Thread.currentThread().interrupt();
+            }
         }
         System.out.println("[信息] 已关闭");
     }
@@ -307,17 +321,27 @@ public class TranslatorServer {
                 }
                 if (direction == null) direction = "en2zh";
 
-                String userPrompt = buildUserPrompt(text.trim(), direction);
-                String llamaResponse = callLlamaApi(null, userPrompt);
-                String result = extractContent(llamaResponse);
-
                 String json;
                 if ("en2both".equals(direction)) {
-                    String userPromptEn = "Translate the following text into English, output only the translation:\n\n" + text.trim();
-                    String llamaResponseEn = callLlamaApi(null, userPromptEn);
-                    String resultEn = extractContent(llamaResponseEn);
-                    json = "{\"result_zh\":" + escapeJson(result) + ",\"result_en\":" + escapeJson(resultEn) + "}";
+                    // Single call producing both languages — halves latency vs. two serial calls.
+                    String bothPrompt = "Translate the following text into Chinese and English. "
+                            + "Respond using this exact format and nothing else:\n"
+                            + "[ZH]\\n<Chinese translation>\\n[EN]\\n<English translation>\\n\\nText:\\n" + text.trim();
+                    String both = extractContent(callLlamaApi(null, bothPrompt));
+                    String[] parts = splitBoth(both);
+                    if (parts == null) {
+                        // Format not recognized → fall back to two separate calls (correctness first).
+                        parts = new String[]{
+                            extractContent(callLlamaApi(null,
+                                "Translate the following segment into Chinese, without additional explanation.\n\n" + text.trim())),
+                            extractContent(callLlamaApi(null,
+                                "Translate the following segment into English, without additional explanation.\n\n" + text.trim()))
+                        };
+                    }
+                    json = "{\"result_zh\":" + escapeJson(parts[0]) + ",\"result_en\":" + escapeJson(parts[1]) + "}";
                 } else {
+                    String userPrompt = buildUserPrompt(text.trim(), direction);
+                    String result = extractContent(callLlamaApi(null, userPrompt));
                     json = "{\"result\":" + escapeJson(result) + "}";
                 }
                 sendJson(exchange, 200, json);
@@ -343,8 +367,19 @@ public class TranslatorServer {
         }
     }
 
-    private String callLlamaApi(String userPrompt) throws Exception {
-        return callLlamaApi(null, userPrompt);
+    /**
+     * Split the model's combined-output (marked with [ZH] / [EN]) into two pieces.
+     * Returns null if the markers are not found, so the caller can fall back.
+     */
+    private static String[] splitBoth(String text) {
+        if (text == null) return null;
+        int zhIdx = text.indexOf("[ZH]");
+        int enIdx = text.indexOf("[EN]");
+        if (zhIdx < 0 || enIdx <= zhIdx) return null;
+        String zh = text.substring(zhIdx + 4, enIdx).trim();
+        String en = text.substring(enIdx + 4).trim();
+        if (zh.isEmpty() || en.isEmpty()) return null;
+        return new String[]{zh, en};
     }
 
     private String callLlamaApi(String systemPrompt, String userText) throws Exception {
@@ -387,11 +422,7 @@ public class TranslatorServer {
     private String extractContent(String jsonResponse) {
         // Extract from /v1/chat/completions response: choices[0].message.content
         int idx = jsonResponse.indexOf("\"content\"");
-        if (idx < 0) {
-            // Fallback: try "content" from /completion response
-            idx = jsonResponse.indexOf("\"content\"");
-            if (idx < 0) return jsonResponse;
-        }
+        if (idx < 0) return jsonResponse;
 
         // Find the content value after "content":
         // Skip past "content" and ":"
@@ -459,9 +490,22 @@ public class TranslatorServer {
             if ("/".equals(path)) path = "/index.html";
             if (path.startsWith("/")) path = path.substring(1);
 
-            File file = new File(webDir, path);
+            File webRoot = new File(webDir).getCanonicalFile();
+            File file = new File(webRoot, path).getCanonicalFile();
+
+            // Reject path traversal (e.g. /../../etc/passwd) — must stay under web root.
+            if (!file.getPath().startsWith(webRoot.getPath())) {
+                String msg = "403 Forbidden";
+                byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(403, data.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(data);
+                }
+                return;
+            }
+
             if (!file.exists() || file.isDirectory()) {
-                file = new File(webDir, "index.html");
+                file = new File(webRoot, "index.html");
             }
 
             if (!file.exists()) {
@@ -510,9 +554,18 @@ public class TranslatorServer {
     }
 
     private void setCORS(HttpExchange exchange) {
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        // Only reflect local origins; refuse arbitrary websites calling the local API.
+        String origin = exchange.getRequestHeaders().getFirst("Origin");
+        if (origin != null && isLocalOrigin(origin)) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+            exchange.getResponseHeaders().set("Vary", "Origin");
+        }
         exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+    }
+
+    private static boolean isLocalOrigin(String origin) {
+        return origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:");
     }
 
     private void sendJson(HttpExchange exchange, int code, String json) throws IOException {
