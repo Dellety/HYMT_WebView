@@ -323,22 +323,15 @@ public class TranslatorServer {
 
                 String json;
                 if ("en2both".equals(direction)) {
-                    // Single call producing both languages — halves latency vs. two serial calls.
-                    String bothPrompt = "Translate the following text into Chinese and English. "
-                            + "Respond using this exact format and nothing else:\n"
-                            + "[ZH]\\n<Chinese translation>\\n[EN]\\n<English translation>\\n\\nText:\\n" + text.trim();
-                    String both = extractContent(callLlamaApi(null, bothPrompt));
-                    String[] parts = splitBoth(both);
-                    if (parts == null) {
-                        // Format not recognized → fall back to two separate calls (correctness first).
-                        parts = new String[]{
-                            extractContent(callLlamaApi(null,
-                                "Translate the following segment into Chinese, without additional explanation.\n\n" + text.trim())),
-                            extractContent(callLlamaApi(null,
-                                "Translate the following segment into English, without additional explanation.\n\n" + text.trim()))
-                        };
-                    }
-                    json = "{\"result_zh\":" + escapeJson(parts[0]) + ",\"result_en\":" + escapeJson(parts[1]) + "}";
+                    // Two independent calls. Hy-MT2-1.8B is a small translation model that
+                    // cannot follow a "produce both languages in one shot" instruction —
+                    // it treats the whole prompt (including format examples like
+                    // <Chinese translation>) as the source text and echoes it. Keep it simple.
+                    String resultZh = extractContent(callLlamaApi(null,
+                        "Translate the following segment into Chinese, without additional explanation.\n\n" + text.trim()));
+                    String resultEn = extractContent(callLlamaApi(null,
+                        "Translate the following segment into English, without additional explanation.\n\n" + text.trim()));
+                    json = "{\"result_zh\":" + escapeJson(resultZh) + ",\"result_en\":" + escapeJson(resultEn) + "}";
                 } else {
                     String userPrompt = buildUserPrompt(text.trim(), direction);
                     String result = extractContent(callLlamaApi(null, userPrompt));
@@ -365,21 +358,6 @@ public class TranslatorServer {
             default:
                 return "Translate the following segment into Chinese, without additional explanation.\n\n" + text;
         }
-    }
-
-    /**
-     * Split the model's combined-output (marked with [ZH] / [EN]) into two pieces.
-     * Returns null if the markers are not found, so the caller can fall back.
-     */
-    private static String[] splitBoth(String text) {
-        if (text == null) return null;
-        int zhIdx = text.indexOf("[ZH]");
-        int enIdx = text.indexOf("[EN]");
-        if (zhIdx < 0 || enIdx <= zhIdx) return null;
-        String zh = text.substring(zhIdx + 4, enIdx).trim();
-        String en = text.substring(enIdx + 4).trim();
-        if (zh.isEmpty() || en.isEmpty()) return null;
-        return new String[]{zh, en};
     }
 
     private String callLlamaApi(String systemPrompt, String userText) throws Exception {
