@@ -1,4 +1,5 @@
 models/
+Models
 /dist/models/
 /llama-*-bin-*/
 /dist/llama-*-bin-*/
