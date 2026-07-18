@@ -2,8 +2,9 @@
 //!
 //! 设计要点：
 //! - 所有字段都有默认值，旧版 `config.yaml`（缺少新字段）可正常加载。
-//! - 配置文件查找顺序：exe 同目录 → 当前工作目录 → 项目根（开发期）。
-//!   这与 Java 版 `getBaseDir` 行为一致：优先与可执行文件同目录。
+//! - 资源根（config.yaml / models/ 所在目录）按平台区分：
+//!   - **macOS**：`~/Library/Application Support/HYMTTranslator`（用户可编辑，不进 .app 包）
+//!   - **其它平台**：exe 同目录 → 进程 cwd（与历史版本一致）
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -146,41 +147,113 @@ pub fn load_config() -> AppConfig {
 }
 
 /// 候选配置文件路径列表。
+///
+/// 查找优先级：
+/// - **macOS**：`~/Library/Application Support/HYMTTranslator/config.yaml`
+///   （把用户可编辑资源移出 .app 包，便于维护；首次启动由 `ensure_user_resources` 写入）
+/// - **其它平台**：exe 同目录 → 进程 cwd
 fn config_search_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
-    // 1. exe 同目录（打包后行为，与 Java getBaseDir 一致）
+    // macOS：用户专属资源目录优先（.app 包内部不便于用户编辑）
+    #[cfg(target_os = "macos")]
+    {
+        paths.push(app_support_dir().join("config.yaml"));
+    }
+
+    // exe 同目录（Windows 打包后行为；macOS 作为兜底）
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             paths.push(dir.join("config.yaml"));
         }
     }
 
-    // 2. 当前工作目录
+    // 进程当前工作目录（开发期从项目根运行时命中）
     if let Ok(cwd) = std::env::current_dir() {
         paths.push(cwd.join("config.yaml"));
     }
 
-    // 3. 项目根（开发期 src-tauri/.. ）
-    //    CARGO_MANIFEST_DIR 仅在编译期可知；运行时通过 exe 上溯两级兜底。
     paths
 }
 
-/// 配置文件所在的「基目录」——用于查找 `models/`、`config.yaml` 等资源。
-/// 优先返回找到 config.yaml 的目录，否则退化到 exe 同目录。
-pub fn resolve_base_dir() -> PathBuf {
-    for candidate in config_search_paths() {
-        if candidate.is_file() {
-            if let Some(dir) = candidate.parent() {
-                return dir.to_path_buf();
-            }
+/// 用户可编辑资源所在的「基目录」。
+///
+/// - **macOS**：`~/Library/Application Support/HYMTTranslator`
+///   原因：`.app` 包对普通用户不可见（需"显示包内容"），且签名后只读，
+///   把 config.yaml / models/ 放在里面无法维护。
+/// - **Windows / 其它**：exe 同目录（保持与历史版本一致，exe 装在
+///   `%LOCALAPPDATA%`，用户可直接访问）。
+pub fn app_support_dir() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join("Library/Application Support/HYMTTranslator");
         }
+        // HOME 取不到时的极罕见兜底：走 exe 同目录
     }
-    // 兜底：exe 同目录
     std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// 首次启动保障：确保用户资源目录与基础文件就绪。
+///
+/// 幂等，可在 setup 阶段无脑调用：
+/// - 目录不存在 → 创建
+/// - `config.yaml` 不存在 → 写入带注释的默认模板（嵌入项目根 `config.yaml`）
+/// - `models/` 不存在 → 创建空目录
+///
+/// 返回资源根目录，供后续路径解析复用。
+pub fn ensure_user_resources() -> std::io::Result<PathBuf> {
+    let base = app_support_dir();
+    if !base.exists() {
+        std::fs::create_dir_all(&base)?;
+    }
+
+    // 默认 config.yaml 模板（编译期嵌入，带注释便于用户编辑）
+    let config_path = base.join("config.yaml");
+    if !config_path.exists() {
+        let template = include_str!("../../config.yaml");
+        std::fs::write(&config_path, template)?;
+        log::info!("已初始化默认配置: {}", config_path.display());
+    }
+
+    // models/ 目录
+    let models_dir = base.join("models");
+    if !models_dir.exists() {
+        std::fs::create_dir_all(&models_dir)?;
+        log::info!("已创建 models/ 目录: {}", models_dir.display());
+    }
+
+    Ok(base)
+}
+
+/// 配置文件所在的「基目录」——用于查找 `models/`、`config.yaml` 等资源。
+///
+/// macOS 直接用 `app_support_dir()`（即 `~/Library/Application Support/HYMTTranslator`），
+/// 其它平台优先返回找到 config.yaml 的目录，否则退化到 exe 同目录。
+pub fn resolve_base_dir() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        return app_support_dir();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        for candidate in config_search_paths() {
+            if candidate.is_file() {
+                if let Some(dir) = candidate.parent() {
+                    return dir.to_path_buf();
+                }
+            }
+        }
+        // 兜底：exe 同目录
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
 }
 
 /// 在 base_dir 下查找 llama-server 可执行文件。

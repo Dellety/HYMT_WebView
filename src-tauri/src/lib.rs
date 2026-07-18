@@ -37,6 +37,13 @@ pub fn run() {
             let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
                 .try_init();
 
+            // 保障用户资源目录就绪（macOS: ~/Library/Application Support/HYMTTranslator）
+            // —— 首次启动写入默认 config.yaml、创建 models/，之后齿轮按钮一定能打开到。
+            if let Err(e) = config::ensure_user_resources() {
+                log::error!("初始化用户资源目录失败: {e}");
+                // 不致命：降级走默认配置，齿轮按钮报错由前端提示
+            }
+
             // 加载配置
             let cfg = config::load_config();
 
