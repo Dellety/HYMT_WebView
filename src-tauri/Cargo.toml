@@ -1,6 +1,6 @@
 [package]
 name = "hymt-translator"
-version = "1.0.0"
+version = "1.1.0"
 description = "本地翻译器 - 基于 Tauri 2 + llama.cpp"
 authors = ["Dellety"]
 edition = "2021"
