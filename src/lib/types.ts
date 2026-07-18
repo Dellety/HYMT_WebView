@@ -26,8 +26,8 @@ export type EngineStatusPayload =
   | { error: string }
   | Record<string, unknown>;
 
-/** 翻译方向。 */
-export type Direction = "zh2en" | "en2both" | "en2zh" | "de2en";
+/** 翻译方向。与 Rust `Direction::parse` 对齐。 */
+export type Direction = "zh2en" | "en2both" | "en2zh" | "de2en" | `fixed:${string}`;
 
 /** 翻译结果。对应 Rust `TranslateResult`（#[serde(untagged)]）。 */
 export type TranslateResult =
@@ -44,9 +44,34 @@ export interface AppConfig {
   repeat_penalty: number;
   max_tokens: number;
   context_size: number;
+  /** 目标语言。"auto" 或具体语言名（如 "English"）。 */
+  target_language: string;
   auto_start: boolean;
   force_kill_on_exit: boolean;
 }
+
+/** 支持的目标语言列表（与 Rust SUPPORTED_LANGUAGES 对齐，含 "auto"）。
+ * 基于 Hy-MT2-1.8B 实测能力筛选，法语/俄语遵循度差不列入。 */
+export const SUPPORTED_LANGUAGES = [
+  "auto",
+  "English",
+  "Chinese",
+  "Japanese",
+  "Korean",
+  "German",
+  "Spanish",
+] as const;
+
+/** 目标语言的中文显示名（UI 展示用）。 */
+export const LANGUAGE_LABELS: Record<string, string> = {
+  auto: "自动检测",
+  English: "英语",
+  Chinese: "中文",
+  Japanese: "日语",
+  Korean: "韩语",
+  German: "德语",
+  Spanish: "西班牙语",
+};
 
 /**
  * 规范化引擎状态 payload 为 { kind, message? } 形式，方便 UI 判断。

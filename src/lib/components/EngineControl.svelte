@@ -5,6 +5,9 @@
   import { createEngineStatusStore } from "../events";
   import { engineStart, engineStop } from "../api";
 
+  // 紧凑模式：缩小按钮和文字
+  export let compact = false;
+
   // 创建状态 store 并在组件卸载时清理监听
   const [statusStore, cleanup] = createEngineStatusStore();
   // 注意：Svelte 响应式语句里不要写类型注解（类型在编译后被擦除，
@@ -61,32 +64,35 @@
   onDestroy(cleanup);
 </script>
 
-<div class="flex items-center gap-2">
+<div class="flex items-center {compact ? 'gap-1.5' : 'gap-2'}">
   <!-- 状态指示灯 -->
   <div
-    class="h-2.5 w-2.5 rounded-full {dotColor} shadow-sm"
+    class="rounded-full {dotColor} shadow-sm {compact ? 'h-2 w-2' : 'h-2.5 w-2.5'}"
     title={statusText}
     aria-label={statusText}
   ></div>
 
-  <!-- 状态文字 -->
-  <span class="text-xs text-slate-600 select-none">
-    {statusText}
-    {#if status.kind === "error" && status.message}
-      <span class="text-rose-500" title={status.message}>⚠</span>
-    {/if}
-  </span>
+  <!-- 状态文字（紧凑模式下隐藏，仅靠指示灯+按钮 title 表达）-->
+  {#if !compact}
+    <span class="text-xs text-slate-600 select-none">
+      {statusText}
+      {#if status.kind === "error" && status.message}
+        <span class="text-rose-500" title={status.message}>⚠</span>
+      {/if}
+    </span>
+  {/if}
 
   <!-- 操作按钮 -->
   <button
-    class="px-3 py-1 text-xs font-medium rounded transition-colors
+    class="font-medium rounded transition-colors
            disabled:opacity-50 disabled:cursor-not-allowed
+           {compact ? 'px-2 py-0.5 text-[11px]' : 'px-3 py-1 text-xs'}
            {status.kind === 'ready'
       ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200'
       : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'}"
     on:click={handleToggle}
     {disabled}
-    title={status.kind === 'error' && status.message ? status.message : label}
+    title={status.kind === 'error' && status.message ? status.message : statusText}
   >
     {label}
   </button>

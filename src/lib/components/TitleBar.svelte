@@ -11,6 +11,9 @@
   import { listen } from "@tauri-apps/api/event";
   import type { EngineStatusPayload } from "../types";
 
+  // 紧凑模式：缩小标题栏高度和按钮尺寸
+  export let compact = false;
+
   // 跟踪引擎是否运行，决定关闭时是否需要提示
   let engineRunning = false;
   let unlistenFn: (() => void) | null = null;
@@ -61,21 +64,27 @@
 </script>
 
 <div
-  class="flex items-center justify-between h-9 px-3 bg-white/80 backdrop-blur border-b border-slate-200 select-none"
+  class="flex items-center justify-between bg-white/80 backdrop-blur border-b border-slate-200 select-none {compact
+    ? 'h-7 px-2'
+    : 'h-9 px-3'}"
   data-tauri-drag-region
 >
-  <!-- 左侧：应用名 -->
+  <!-- 左侧：应用名（紧凑模式下隐藏文字，只留图标省空间）-->
   <div class="flex items-center gap-2" data-tauri-drag-region>
-    <div class="w-4 h-4 rounded bg-blue-500 flex items-center justify-center">
-      <span class="text-[8px] text-white font-bold leading-none">译</span>
+    <div class="rounded bg-blue-500 flex items-center justify-center {compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}">
+      <span class="text-white font-bold leading-none {compact ? 'text-[7px]' : 'text-[8px]'}">译</span>
     </div>
-    <span class="text-xs font-medium text-slate-600">本地翻译器</span>
+    {#if !compact}
+      <span class="text-xs font-medium text-slate-600">本地翻译器</span>
+    {/if}
   </div>
 
   <!-- 右侧：窗口按钮 -->
-  <div class="flex items-center gap-1">
+  <div class="flex items-center {compact ? 'gap-0.5' : 'gap-1'}">
     <button
-      class="w-7 h-7 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors"
+      class="flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors {compact
+        ? 'w-6 h-6'
+        : 'w-7 h-7'}"
       on:click={minimize}
       title="最小化"
       aria-label="最小化"
@@ -85,7 +94,9 @@
       </svg>
     </button>
     <button
-      class="w-7 h-7 flex items-center justify-center rounded text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-colors"
+      class="flex items-center justify-center rounded text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-colors {compact
+        ? 'w-6 h-6'
+        : 'w-7 h-7'}"
       on:click={handleClose}
       title="关闭"
       aria-label="关闭"

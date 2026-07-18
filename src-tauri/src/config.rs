@@ -33,6 +33,13 @@ pub struct AppConfig {
     #[serde(default = "default_context_size")]
     pub context_size: u32,
 
+    // ===== 翻译目标语言 =====
+    /// 目标语言。`auto` 表示按输入语言自动决定（默认）；
+    /// 设为具体语言名（如 English、Chinese）则固定翻译到该语言。
+    /// 合法值见 SUPPORTED_LANGUAGES。
+    #[serde(default = "default_target_language")]
+    pub target_language: String,
+
     // ===== 引擎生命周期（新增）=====
     /// 应用启动时是否自动加载引擎。默认 true。
     #[serde(default = "default_true")]
@@ -53,6 +60,7 @@ impl Default for AppConfig {
             repeat_penalty: default_repeat_penalty(),
             max_tokens: default_max_tokens(),
             context_size: default_context_size(),
+            target_language: default_target_language(),
             auto_start: default_true(),
             force_kill_on_exit: default_true(),
         }
@@ -67,7 +75,42 @@ fn default_top_k() -> u32 { 20 }
 fn default_repeat_penalty() -> f64 { 1.05 }
 fn default_max_tokens() -> u32 { 2048 }
 fn default_context_size() -> u32 { 4096 }
+fn default_target_language() -> String { "auto".into() }
 fn default_true() -> bool { true }
+
+/// 支持的目标语言（用于校验 config 里的 target_language）。
+/// 顺序即 UI 里的展示顺序。
+///
+/// 注意：此列表基于 Hy-MT2-1.8B 模型的实测能力筛选。
+/// 模型对法语/俄语遵循度差（会原样返回不翻译），故未列入。
+/// 如更换模型可重新评估扩展。
+pub const SUPPORTED_LANGUAGES: &[&str] = &[
+    "auto",
+    "English",
+    "Chinese",
+    "Japanese",
+    "Korean",
+    "German",
+    "Spanish",
+];
+
+/// 校验 target_language 是否合法。不合法（含大小写差异）时返回 "auto"。
+/// 注意：此处做小写归一化比较，但返回原始合法值（首字母大写形式）。
+pub fn normalize_target_language(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let lower = trimmed.to_lowercase();
+    for &lang in SUPPORTED_LANGUAGES {
+        if lang.to_lowercase() == lower {
+            return lang.to_string();
+        }
+    }
+    // 不识别的值：回退到 auto，并记录警告
+    log::warn!(
+        "未识别的 target_language '{trimmed}'，回退到 'auto'。支持的语言: {:?}",
+        SUPPORTED_LANGUAGES
+    );
+    "auto".to_string()
+}
 
 /// 加载配置：按优先级查找 `config.yaml`，找不到则返回默认值。
 ///
@@ -80,7 +123,9 @@ pub fn load_config() -> AppConfig {
         if candidate.is_file() {
             match std::fs::read_to_string(&candidate) {
                 Ok(text) => match serde_yaml::from_str::<AppConfig>(&text) {
-                    Ok(cfg) => {
+                    Ok(mut cfg) => {
+                        // 归一化 target_language（校验合法性，非法值回退到 auto）
+                        cfg.target_language = normalize_target_language(&cfg.target_language);
                         log::info!("已加载配置: {}", candidate.display());
                         return cfg;
                     }

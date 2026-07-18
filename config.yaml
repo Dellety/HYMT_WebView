@@ -10,7 +10,7 @@ auto_start: true
 # 关闭窗口时的引擎处理策略：
 # true:  强制清理 —— 直接停止引擎并退出（默认，确保不残留）
 # false: 弹窗确认 —— 引擎运行时关闭会弹出确认对话框
-force_kill_on_exit: true
+force_kill_on_exit: false
 
 # ===== llama.cpp 路径 =====
 # llama.cpp 所在目录（包含 llama-server 可执行文件的目录），或直接指向可执行文件。
@@ -32,3 +32,10 @@ top_k: 20
 repeat_penalty: 1.05
 max_tokens: 2048
 context_size: 4096
+
+# ===== 目标语言 =====
+# auto: 自动检测（默认，中文→英文，外文→中英双语）
+# 或指定固定目标语言（实测 Hy-MT2-1.8B 支持良好的语言）：
+#   English / Chinese / Japanese / Korean / German / Spanish
+# 指定后，无论输入什么语言都翻译到该语言。
+target_language: auto

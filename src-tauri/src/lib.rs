@@ -18,6 +18,10 @@ use std::sync::Arc;
 use tauri::{Manager, WindowEvent};
 use translate::{Direction, TranslateResult};
 
+// Windows: 引入 CommandExt 以使用 creation_flags（CREATE_NO_WINDOW）
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -74,6 +78,8 @@ pub fn run() {
             cmd_engine_stop,
             cmd_get_status,
             cmd_get_config,
+            cmd_open_config,
+            cmd_open_models_dir,
         ])
         .on_window_event(|window, event| {
             // 窗口关闭事件：处理引擎清理
@@ -163,4 +169,99 @@ async fn cmd_get_config(
     // 返回配置快照（隐藏敏感信息这里暂时不需要）
     let cfg = manager.config_snapshot().await;
     Ok(cfg)
+}
+
+/// 用系统默认程序打开 config.yaml。
+///
+/// 跨平台实现：
+/// - Windows: `cmd /C start "" <path>` 触发系统关联程序（通常是记事本）
+/// - macOS:   `open <path>`
+/// - Linux:   `xdg-open <path>`
+///
+/// 用 detached spawn 而非 wait，避免阻塞 command。
+#[tauri::command]
+async fn cmd_open_config() -> Result<(), String> {
+    let base_dir = config::resolve_base_dir();
+    let config_path = base_dir.join("config.yaml");
+
+    if !config_path.exists() {
+        return Err(format!("配置文件不存在: {}", config_path.display()));
+    }
+
+    let path_str = config_path.to_string_lossy().to_string();
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: 用 cmd /C start 打开。CREATE_NO_WINDOW 避免闪过黑框。
+        // 路径用引号包裹防止空格/中文路径出问题。
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path_str])
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|e| format!("打开失败: {e}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| format!("打开失败: {e}"))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| format!("打开失败: {e}"))?;
+    }
+
+    log::info!("已用系统编辑器打开 config.yaml: {}", config_path.display());
+    Ok(())
+}
+
+/// 用系统文件管理器打开 models/ 目录，方便用户拷贝模型文件进去。
+///
+/// 如果 models/ 不存在，先创建空目录（确保用户第一次就能看到并往里放文件）。
+/// 跨平台：
+/// - Windows: `explorer <path>`
+/// - macOS:   `open <path>`
+/// - Linux:   `xdg-open <path>`
+#[tauri::command]
+async fn cmd_open_models_dir() -> Result<(), String> {
+    let base_dir = config::resolve_base_dir();
+    let models_dir = base_dir.join("models");
+
+    // 不存在则先创建（用户首次使用时 models/ 可能还没有）
+    if !models_dir.exists() {
+        std::fs::create_dir_all(&models_dir)
+            .map_err(|e| format!("创建 models/ 目录失败: {e}"))?;
+        log::info!("已创建 models/ 目录: {}", models_dir.display());
+    }
+
+    let path_str = models_dir.to_string_lossy().to_string();
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| format!("打开失败: {e}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| format!("打开失败: {e}"))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| format!("打开失败: {e}"))?;
+    }
+
+    log::info!("已打开 models/ 目录: {}", models_dir.display());
+    Ok(())
 }

@@ -36,3 +36,13 @@ export async function getStatus(): Promise<EngineStatusPayload> {
 export async function getConfig(): Promise<AppConfig> {
   return invoke<AppConfig>("cmd_get_config");
 }
+
+/** 用系统默认编辑器打开 config.yaml。 */
+export async function openConfig(): Promise<void> {
+  return invoke<void>("cmd_open_config");
+}
+
+/** 用系统文件管理器打开 models/ 目录（不存在则先创建）。 */
+export async function openModelsDir(): Promise<void> {
+  return invoke<void>("cmd_open_models_dir");
+}
