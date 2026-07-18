@@ -1,0 +1,59 @@
+[package]
+name = "hymt-translator"
+version = "1.0.0"
+description = "本地翻译器 - 基于 Tauri 2 + llama.cpp"
+authors = ["Dellety"]
+edition = "2021"
+rust-version = "1.77"
+
+# 库形态（Tauri 2 推荐结构：lib + bin）
+[lib]
+name = "hymt_translator_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+# 异步运行时与进程管理
+tokio = { version = "1", features = ["full"] }
+# HTTP 客户端（调用 llama-server）
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+# 日志
+log = "0.4"
+env_logger = "0.11"
+# 错误处理
+anyhow = "1"
+thiserror = "1"
+
+# ===== 平台特定的子进程残留防护 =====
+# Windows: 使用 Job Object 确保子进程随父进程退出
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_Foundation",
+    "Win32_Security",
+] }
+
+# Unix: 进程组（setsid + killpg）
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+# 默认启用自定义协议
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+# 优化体积与性能
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

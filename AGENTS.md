@@ -1,4 +1,33 @@
-# 本地翻译器 (Local Translator)
+# 本地翻译器 (HYMT Translator)
+
+> ⚠️ **架构已迁移（2026-07）**：本项目已从 Java + Web 重写为 **Tauri 2 + Rust + Svelte** 桌面应用。
+> - 旧的 Java 代码归档在 `legacy/`（`TranslatorServer.java`、`web/`、启动脚本），仅供参考。
+> - **不再有 7779 端口、Java、JAR、HTTP 静态服务**。前端由 Tauri WebView 直接渲染。
+> - 新架构：`Svelte 前端 ──invoke──▶ Rust command ──reqwest──▶ llama-server:7780`
+> - 下方内容为旧 Java 版的历史记录，部分仍适用于翻译逻辑，但架构描述已过时。
+> - 新版开发请参考 `README.md` 和 `src-tauri/src/` 下的 Rust 代码。
+
+## 项目概述（当前架构）
+
+基于 Tauri 2 + Rust + Svelte + llama.cpp + 腾讯 Hy 翻译模型的本地翻译桌面应用。跨平台（Windows/Mac），单一代码库。提供引擎加载/卸载按钮，进程防残留（Job Object / 进程组）。
+
+### 新架构关键文件
+
+| 文件 | 用途 |
+|------|------|
+| `src-tauri/src/lib.rs` | Tauri 入口、commands、setup、窗口事件 |
+| `src-tauri/src/llama.rs` | 引擎管理状态机（spawn/stop/health/translate）|
+| `src-tauri/src/translate.rs` | 翻译逻辑 + 提示词 |
+| `src-tauri/src/config.rs` | serde_yaml 配置加载 |
+| `src-tauri/src/platform/` | 平台特定（Windows Job Object / Unix 进程组）|
+| `src/lib/` | Svelte 前端（api.ts、events.ts、detect.ts、components/）|
+| `config.yaml` | 配置（新增 `auto_start`、`force_kill_on_exit`）|
+
+---
+
+# 以下为旧 Java 版历史记录（归档参考）
+
+
 
 ## 项目概述
 

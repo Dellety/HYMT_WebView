@@ -1,11 +1,34 @@
+# ===== Node / 前端 =====
+node_modules/
+dist/
+*.log
+
+# ===== Rust / Tauri =====
+src-tauri/target/
+# 注意：Cargo.lock 对于二进制应用应该提交（保证可复现构建），故不忽略
+src-tauri/gen/schemas/
+
+# ===== 模型与运行时（不提交大文件，用户自备）=====
 models/
 Models
-/dist/models/
+*.gguf
+
+# ===== llama.cpp 分发包 =====
+# 形式1: llama-bXXXX-bin-win-xxx 解压目录
 /llama-*-bin-*/
 /dist/llama-*-bin-*/
+# 形式2: 简单的 llama/ 目录（运行时放置）
+/llama/
+/dist/llama/
+
+# ===== 旧 Java 产物（保留 legacy/ 源码，忽略产物）=====
 dist/
 *.class
 *.jar
+build/
+release.zip
+
+# ===== IDE / OS =====
 .DS_Store
 Thumbs.db
 .idea/
@@ -13,5 +36,6 @@ Thumbs.db
 .vscode/
 .claude/
 .codegraph/
-build/
-release.zip
+
+# ===== 图标源（保留生成结果，忽略中间产物按需）=====
+# src-tauri/icons/ 提交（体积小），icons-src 可选
