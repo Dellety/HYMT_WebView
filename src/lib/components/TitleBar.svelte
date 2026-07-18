@@ -4,7 +4,7 @@
   // - 右侧最小化 / 关闭按钮
   // - 中间或左侧放应用名
 
-  import { minimize, closeWindow } from "../window";
+  import { minimize, closeWindow, destroyWindow } from "../window";
   import { onMount } from "svelte";
   import { getStatus, engineStop } from "../api";
   import { normalizeStatus } from "../types";
@@ -17,6 +17,12 @@
   // 跟踪引擎是否运行，决定关闭时是否需要提示
   let engineRunning = false;
   let unlistenFn: (() => void) | null = null;
+
+  // 关闭确认模态框状态
+  // 当 force_kill_on_exit=false 且引擎运行时，后端会阻止 close；
+  // 这里用一个原生 Svelte 模态框替代 confirm()（后者在 WebView 里不稳定）。
+  let showExitConfirm = false;
+  let closing = false; // 防止重复点击
 
   onMount(async () => {
     // 初始快照
@@ -31,35 +37,51 @@
     unlistenFn = await listen<EngineStatusPayload>("engine://status", (e) => {
       const s = normalizeStatus(e.payload);
       engineRunning = s.kind === "ready" || s.kind === "loading";
+      // 引擎被外部（如手动卸下按钮）停止后，如果用户之前点了关闭被阻止，
+      // 此刻自动补上关闭动作。
+      if (!engineRunning && showExitConfirm && closing) {
+        // 用户已通过其它方式卸下引擎：直接退出
+        destroyWindow();
+      }
     });
   });
 
   async function handleClose() {
-    // 后端在 force_kill_on_exit=false 且引擎运行时会 prevent_close，
-    // 此时本次 close() 调用不会真正关闭窗口。
-    // 简单策略：直接调用 close，让后端裁决。若被阻止，弹出原生 confirm。
-    if (engineRunning) {
-      // 乐观尝试关闭；后端若 prevent_close，前端弹确认
-      await closeWindow();
-      // 如果代码继续执行到这里，说明后端阻止了关闭（弹窗模式 + 引擎运行）
-      // 用原生 confirm 二次确认（未来可换成 Svelte 模态框）
-      setTimeout(async () => {
-        const ok = confirm("引擎正在运行，关闭窗口将停止引擎。是否继续？");
-        if (ok) {
-          // 用户确认：停止引擎后再关闭。
-          // 注意：这是 force_kill_on_exit=false 的分支，需要显式 stop。
-          try {
-            await engineStop();
-          } catch (e) {
-            console.error("停止引擎失败:", e);
-          }
-          // stop 后再次 close，此时引擎已停，后端不会再 prevent
-          await closeWindow();
-        }
-      }, 100);
-    } else {
-      await closeWindow();
+    if (closing) return;
+    closing = true;
+    try {
+      if (engineRunning) {
+        // 引擎运行中：尝试 close。后端 force_kill=true 会直接关闭并清理；
+        // force_kill=false 会 prevent_close，此时前端弹模态框确认。
+        await closeWindow();
+        // 走到这里说明后端阻止了关闭（force_kill=false 分支）
+        showExitConfirm = true;
+      } else {
+        // 引擎未运行：直接关闭
+        await closeWindow();
+      }
+    } finally {
+      closing = false;
     }
+  }
+
+  // 模态框「确认退出」：停引擎 → 等状态变 Stopped（监听器会触发 destroy）→ 兜底 destroy
+  async function confirmExit() {
+    showExitConfirm = false;
+    closing = true;
+    try {
+      await engineStop();
+      // 监听器收到 Stopped 后会自动 destroyWindow；此处加超时兜底
+      setTimeout(() => destroyWindow(), 1500);
+    } catch (e) {
+      console.error("停止引擎失败:", e);
+      closing = false;
+    }
+  }
+
+  function cancelExit() {
+    showExitConfirm = false;
+    closing = false;
   }
 </script>
 
@@ -112,3 +134,39 @@
     </button>
   </div>
 </div>
+
+{#if showExitConfirm}
+  <!-- 退出确认模态框（替代不可靠的 confirm()） -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+    on:click|self={cancelExit}
+    on:keydown|self={(e) => e.key === "Escape" && cancelExit()}
+    role="presentation"
+  >
+    <div
+      class="bg-white rounded-lg shadow-xl border border-slate-200 p-5 max-w-xs w-[80%]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="exit-confirm-title"
+    >
+      <h3 id="exit-confirm-title" class="text-sm font-semibold text-slate-800 mb-2">确认退出？</h3>
+      <p class="text-xs text-slate-600 mb-4 leading-relaxed">
+        引擎正在运行，退出将停止引擎并释放显存/内存。
+      </p>
+      <div class="flex justify-end gap-2">
+        <button
+          class="px-3 py-1.5 text-xs rounded border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+          on:click={cancelExit}
+        >
+          取消
+        </button>
+        <button
+          class="px-3 py-1.5 text-xs rounded bg-rose-500 text-white hover:bg-rose-600 transition-colors"
+          on:click={confirmExit}
+        >
+          停止引擎并退出
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
