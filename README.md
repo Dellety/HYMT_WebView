@@ -91,8 +91,48 @@ npm run tauri build
 - ⚠️ 未签名的 `.exe` 可能触发 SmartScreen，用户需点击「更多信息 → 仍要运行」
 
 ### Mac
-- ⚠️ 未签名的 `.dmg` 在 macOS 15+ 无法直接分发。公开分发需 Apple Developer ID 签名 + 公证
-- 自用或小范围使用：下载后执行 `xattr -cr /path/to/HYMT\ Translator.app` 解除隔离
+
+**构建环境**（已在本机 macOS 26.5 arm64 验证）：
+- Node.js 18+ / Rust stable / Xcode Command Line Tools
+- `npm install && npm run tauri build`
+- 产物：`src-tauri/target/release/bundle/dmg/HYMT Translator_1.0.0_aarch64.dmg`
+- 架构：**arm64**（Apple Silicon 原生），`LSMinimumSystemVersion: 10.15`，可在 macOS 26 运行
+- ⚠️ 当前仅 arm64；Intel Mac 需另加 `x86_64-apple-darwin` target 单独编译
+
+**首次打开（macOS 26 / Gatekeeper 拦截处理）**：
+
+App 未做 Apple Developer ID 签名 + 公证，首次打开会被 Gatekeeper 拦截，提示「无法打开，因为无法验证开发者」或「已损坏」。**任选一种**解除方式：
+
+- **方式 A（推荐，普通用户）—— 系统设置手动允许**：
+  1. 双击挂载 `.dmg`，把 `HYMT Translator.app` 拖到 `Applications`
+  2. 在访达里**右键**点击 `Applications/HYMT Translator.app` → 选「打开」（直接双击会被拦截）
+  3. 弹出警告对话框 → 点「仍要打开」
+  4. 若提示「已损坏，无法打开」：打开「系统设置 → 隐私与安全性」，滚动到底部，找到关于 HYMT Translator 的提示，点「仍要打开」
+
+- **方式 B（终端一行命令，彻底去除隔离属性）**：
+  ```bash
+  xattr -cr "/Applications/HYMT Translator.app"
+  ```
+  执行后即可正常双击打开。此命令清除 `com.apple.quarantine` 隔离标记，仅对当前用户本机有效。
+
+> ⚠️ 以上仅为**自用 / 小范围分发**的临时方案。若要公开分发，需购买 Apple Developer ID 证书，用 `tauri build` 配合 `APPLE_SIGNING_IDENTITY` 环境变量做签名 + `xcrun notarytool` 公证。
+
+**用户资源位置**：
+
+由于 `.app` 包对普通用户不可见（需「显示包内容」），且签名后只读，Mac 版把所有用户可编辑资源放在 App 沙盒外的标准位置：
+
+```
+~/Library/Application Support/HYMTTranslator/
+├── config.yaml          # 配置（首次启动自动生成，带注释）
+└── models/              # 模型 .gguf 文件放这里
+```
+
+- **首次启动**会自动创建该目录、写入带注释的默认 `config.yaml`、建立空的 `models/` 目录
+- 界面右上角的**齿轮按钮**会用系统默认编辑器打开 `config.yaml`
+- 界面右上角的**文件夹按钮**会用访达打开 `models/`，把下载好的 `.gguf` 拖进去即可
+- 该目录可随时通过访达访问：Finder 菜单「前往 → 前往文件夹」粘贴 `~/Library/Application Support/HYMTTranslator`
+
+> Windows 版行为不变：`config.yaml` 和 `models/` 仍在 exe 同目录（`%LOCALAPPDATA%\...`）。
 
 ## 引擎生命周期
 
