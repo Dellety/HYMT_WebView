@@ -146,7 +146,15 @@ pub fn resolve_llama_binary(base_dir: &Path, cfg: &AppConfig) -> Option<PathBuf>
     // 1. 配置的 llamacpp_dir 优先
     let configured = cfg.llamacpp_dir.trim();
     if !configured.is_empty() {
-        let p = PathBuf::from(configured);
+        // 关键：相对路径相对于 base_dir（exe 同目录）解析，而非进程 cwd。
+        // 这样无论用户从哪里启动 exe（资源管理器双击、快捷方式、命令行），
+        // 路径都能稳定指向 exe 同级目录下的 llama/。
+        let raw = PathBuf::from(configured);
+        let p = if raw.is_absolute() {
+            raw
+        } else {
+            base_dir.join(&raw)
+        };
         // 直接指向可执行文件
         if p.is_file() {
             log::info!("使用配置的 llama-server: {}", p.display());
@@ -158,7 +166,7 @@ pub fn resolve_llama_binary(base_dir: &Path, cfg: &AppConfig) -> Option<PathBuf>
             log::info!("使用配置的 llama-server: {}", exe_in_dir.display());
             return Some(exe_in_dir);
         }
-        log::warn!("配置的 llamacpp_dir 中未找到 llama-server: {configured}");
+        log::warn!("配置的 llamacpp_dir 中未找到 llama-server: {} (解析为 {})", configured, p.display());
     }
 
     // 2. 查找打包风格的 llama-b*-bin-* 目录（Windows 分发常见）
